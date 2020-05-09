@@ -54,7 +54,10 @@ class DQN(object):
 
         self.inputs = Input(shape=self.input_shape,name='Input')
         self.x = Dense(n_hidden_1,activation='relu',name='Hidden1')(self.inputs)
-        #self.x = Dense(n_hidden_2,activation='relu',name='Hidden2')(self.x)
+
+        if n_hidden_2 is not None:
+            self.x = Dense(n_hidden_2,activation='relu',name='Hidden2')(self.x)
+
         self.outputs = Dense(n_actions,name='Output')(self.x)
 
         self.model = tf.keras.Model(inputs=self.inputs, outputs=self.outputs, name='DQNetwork')
@@ -63,11 +66,11 @@ class DQN(object):
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
     
     def get_best_action(self,state):
-
+        state = np.expand_dims(state,axis=0)
         return tf.argmax(self.model(state),1)
     
     def get_best_q(self,state):
-
+        state = np.expand_dims(state,axis=0)
         return np.max(self.model(state),axis=1)
 
 class ActionScheduler(object):
@@ -98,7 +101,7 @@ class ActionScheduler(object):
         self.final_slope = -(self.eps_end_exploration-self.eps_end)/(self.no_exploration_steps)
         self.intercept_2 = self.eps_end - self.final_slope*self.max_steps
 
-    def compute_current_eps(self,step):
+    def _compute_current_eps(self,step):
         if step<=self.full_exploration_steps:
             eps = self.eps_start
         elif step>self.full_exploration_steps and step<=(self.full_exploration_steps + self.exploration_steps):
@@ -109,11 +112,11 @@ class ActionScheduler(object):
     
     def get_action(self,state,step):
 
-        eps = self.compute_current_eps(step)
+        eps = self._compute_current_eps(step)
 
         if np.random.rand(1) < eps:
             return np.random.randint(0, self.n_actions)
-        return self.DQN.get_best_action(state)
+        return self.DQNetwork.get_best_action(state)
     
     def plot_eps_schedule(self):
         eps_values = []
@@ -140,7 +143,6 @@ def train_step(policy_net,target_net,replay_memory,batch_size,gamma):
     best_predicted_q = np.max(pred_target,axis=1)
     
     target_q = rewards + (gamma*best_predicted_q * (1-terminal_flags))
-    print(target_q.shape)
 
     with tf.GradientTape() as tape:
         pred_policy = policy_net.model(states)
@@ -150,7 +152,15 @@ def train_step(policy_net,target_net,replay_memory,batch_size,gamma):
 
     policy_net.optimizer.apply_gradients(zip(gradients, policy_net.model.trainable_variables))
 
-
+def test(env, policy_net):
+    state, ep_reward, done = env.reset(), 0, False
+    while not done:
+        action = policy_net.get_best_action(state)
+        state, reward, done, info = env.step(action)
+        if info['ale.lives']==4:
+            done = True
+        ep_reward += reward
+    return ep_reward
 
 
 
