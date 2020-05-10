@@ -154,13 +154,39 @@ def train_step(policy_net,target_net,replay_memory,batch_size,gamma):
 
 def test(env, policy_net):
     state, ep_reward, done = env.reset(), 0, False
-    while not done:
+    steps = 0
+    while not done and steps<500:
         action = policy_net.get_best_action(state)
         state, reward, done, info = env.step(action)
         if info['ale.lives']==4:
             done = True
         ep_reward += reward
-    return ep_reward
+        steps += 1
+    return ep_reward, steps
+
+def test_show(env, policy_net):
+
+    viewer = rendering.SimpleImageViewer()
+    state, ep_reward, done = env.reset(), 0, False
+
+    rgb = env.render('rgb_array')
+    sleep(0.03)
+    steps = 0
+    while not done and steps<500:
+        upscaled=repeat_upsample(rgb,4, 4)
+        viewer.imshow(upscaled)
+        action = policy_net.get_best_action(state)
+        state, reward, done, info = env.step(action)
+        if info['ale.lives']==4:
+            done = True
+        ep_reward += reward
+        steps += 1
+        rgb = env.render('rgb_array')
+
+    viewer.close()
+    env.close()
+
+    return ep_reward, steps
 
 
 

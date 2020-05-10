@@ -8,6 +8,7 @@ env_name = "Breakout-ram-v0"
 
 seed = 123  # random seed
 log_interval = 10  # controls how often we log progress, in episodes
+show_interval = 20  # controls how often we see an evaluation episode
 
 gamma = 0.99 
 eps_start = 1
@@ -76,9 +77,18 @@ while step_count < max_steps:
     i_episode += 1
 
     if i_episode % log_interval == 0 or step_count >= max_steps:
-        ep_reward = test(env,policy_net)
+        ep_reward, val_steps = test(env,policy_net)
         ep_rew_history.append((i_episode, ep_reward))
-        print("Episode: " + str(i_episode) + "\tSteps: " + str(step_count) + "\tEval reward: " + str(ep_reward))
+        print("Episode: " + str(i_episode) + "\tTotal steps: " 
+            + str(step_count) + "\tEval reward: " + str(ep_reward)
+            + "\tEval steps: " + str(val_steps))
+
+    if i_episode % show_interval == 0 or step_count >= max_steps:
+        ep_reward, val_steps = test_show(env,policy_net)
+        ep_rew_history.append((i_episode, ep_reward))
+        print("Episode: " + str(i_episode) + "\tTotal steps: " 
+            + str(step_count) + "\tEval reward: " + str(ep_reward)
+            + "\tEval steps: " + str(val_steps))
 
 
 
