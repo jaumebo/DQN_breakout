@@ -1,14 +1,18 @@
-import gym
-import time
-from pyvirtualdisplay import Display
-import numpy as np
-from gym.envs.classic_control import rendering
-from time import sleep
+import datetime
 import random
+import time
 from collections import namedtuple
+from time import sleep
+import os
+
+import gym
 import matplotlib.pyplot as plt
-from tensorflow.keras.layers import Dense, Conv2D, Input
+import numpy as np
 import tensorflow as tf
+from gym.envs.classic_control import rendering
+from pyvirtualdisplay import Display
+from tensorflow.keras.layers import Conv2D, Dense, Input
+
 
 def repeat_upsample(rgb_array, k=1, l=1, err=[]):
     # repeat kinda crashes if k/l are zero
@@ -152,47 +156,59 @@ def train_step(policy_net,target_net,replay_memory,batch_size,gamma):
 
     policy_net.optimizer.apply_gradients(zip(gradients, policy_net.model.trainable_variables))
 
-def test(env, policy_net):
-    state, ep_reward, done = env.reset(), 0, False
-    steps = 0
-    while not done and steps<500:
-        action = policy_net.get_best_action(state)
-        state, reward, done, info = env.step(action)
-        if info['ale.lives']==4:
-            done = True
-        ep_reward += reward
-        steps += 1
-    return ep_reward, steps
+    return loss_value
 
-def test_show(env, policy_net):
+def test(env, policy_net, show=False):
 
-    viewer = rendering.SimpleImageViewer()
-    state, ep_reward, done = env.reset(), 0, False
-
-    rgb = env.render('rgb_array')
-    sleep(0.03)
-    steps = 0
-    while not done and steps<500:
-        upscaled=repeat_upsample(rgb,4, 4)
-        viewer.imshow(upscaled)
-        action = policy_net.get_best_action(state)
-        state, reward, done, info = env.step(action)
-        if info['ale.lives']==4:
-            done = True
-        ep_reward += reward
-        steps += 1
+    if show:
+        viewer = rendering.SimpleImageViewer()
         rgb = env.render('rgb_array')
 
-    viewer.close()
-    env.close()
+    state, ep_reward, done = env.reset(), 0, False
+    steps = 0
+    while not done and steps<500:
 
+        if show:
+            upscaled=repeat_upsample(rgb,4, 4)
+            viewer.imshow(upscaled)
+
+        action = policy_net.get_best_action(state)
+        state, reward, done, info = env.step(action)
+        if info['ale.lives']==4:
+            done = True
+        ep_reward += reward
+        steps += 1
+        
+        if show:
+            rgb = env.render('rgb_array')
+    
+    if show:
+        viewer.close()
+        env.close()
+    
     return ep_reward, steps
 
 
+class TensorboardSummary(object):
 
-'''
-ATENCIO
+    def __init__(self,path_logs):
 
-QUAN ES FACI UN PUSH D'UN NEXT STEP QUE HAGI ACABAT, ES PASSA UN TRUE AL FINISHED I EL STATE ANTERIOR
-'''
+        self.path_logs = path_logs
+        
+        self.current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        self.train_log_dir = os.path.join(self.path_logs,self.current_time,"train_rewards")
+        self.val_log_dir = os.path.join(self.path_logs,self.current_time,"validation_rewards")
+        self.q_loss_log_dir = os.path.join(self.path_logs,self.current_time,"q_loss")
+
+        self.train_summary_writer = tf.summary.create_file_writer(self.train_log_dir)
+        self.validation_summary_writer = tf.summary.create_file_writer(self.val_log_dir)
+        self.q_loss_summary_writer = tf.summary.create_file_writer(self.q_loss_log_dir)
+
+        self.dict_param_writer = {'train_rewards': (self.train_summary_writer,'reward'),
+                                    'validation_rewards': (self.validation_summary_writer,'reward'),
+                                    'q_loss': (self.q_loss_summary_writer,'loss')}
+
+    def update_values(self,param,value,episode):
+        with self.dict_param_writer[param][0].as_default():
+            tf.summary.scalar(self.dict_param_writer[param][1], value, step=episode)
 

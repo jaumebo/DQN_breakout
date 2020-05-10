@@ -6,9 +6,11 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # Hyperparameters
 env_name = "Breakout-ram-v0"
 
+path_logs = 'logs'
+
 seed = 123  # random seed
-log_interval = 10  # controls how often we log progress, in episodes
-show_interval = 20  # controls how often we see an evaluation episode
+log_interval = 20  # controls how often we log progress, in episodes
+show_eval = False  # controls if we see an evaluation episode
 
 gamma = 0.99 
 eps_start = 1
@@ -43,14 +45,17 @@ action_scheduler = ActionScheduler(DQNetwork=policy_net,
                                     exploration_steps=exploration_steps,
                                     full_exploration_steps=full_exploration_steps)
 
+tensorboard_summarizer = TensorboardSummary(path_logs)
+
 step_count = 0
+i_episode = 0
 ep_rew_history = []
-i_episode = 0 
-ep_reward = 0
+
 
 while step_count < max_steps:
     
     state, done = env.reset(), False
+    ep_reward = 0
 
     while not done:
 
@@ -58,6 +63,8 @@ while step_count < max_steps:
         step_count+=1
 
         next_state, reward, done, info = env.step(action)
+
+        ep_reward += reward
 
         if info['ale.lives']==4:
             done = True
@@ -69,26 +76,26 @@ while step_count < max_steps:
 
         state = next_state
 
-        train_step(policy_net,target_net,replay_memory,batch_size,gamma)
+        q_loss = train_step(policy_net,target_net,replay_memory,batch_size,gamma)
 
         if step_count % target_update == 0:
             target_net.model.set_weights(policy_net.model.get_weights())
+
+    tensorboard_summarizer.update_values('train_rewards',ep_reward,i_episode)
+    tensorboard_summarizer.update_values('q_loss',q_loss,i_episode)
     
+    if i_episode % log_interval == 0 or step_count >= max_steps:
+        ep_reward, val_steps = test(env,policy_net,show=show_eval)
+        ep_rew_history.append((i_episode, ep_reward))
+        print("Episode: " + str(i_episode) + "\tTotal steps: " 
+            + str(step_count) + "\tEval reward: " + str(ep_reward)
+            + "\tEval steps: " + str(val_steps))
+
+        tensorboard_summarizer.update_values('validation_rewards',ep_reward,i_episode)
+
     i_episode += 1
 
-    if i_episode % log_interval == 0 or step_count >= max_steps:
-        ep_reward, val_steps = test(env,policy_net)
-        ep_rew_history.append((i_episode, ep_reward))
-        print("Episode: " + str(i_episode) + "\tTotal steps: " 
-            + str(step_count) + "\tEval reward: " + str(ep_reward)
-            + "\tEval steps: " + str(val_steps))
 
-    if i_episode % show_interval == 0 or step_count >= max_steps:
-        ep_reward, val_steps = test_show(env,policy_net)
-        ep_rew_history.append((i_episode, ep_reward))
-        print("Episode: " + str(i_episode) + "\tTotal steps: " 
-            + str(step_count) + "\tEval reward: " + str(ep_reward)
-            + "\tEval steps: " + str(val_steps))
 
 
 
