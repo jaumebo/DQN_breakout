@@ -9,8 +9,10 @@ env_name = "Breakout-ram-v0"
 path_logs = 'logs'
 
 seed = 123  # random seed
-log_interval = 20  # controls how often we log progress, in episodes
+log_interval = 10  # controls how often we log progress, in episodes
 show_eval = False  # controls if we see an evaluation episode
+save_gif = True
+gif_dir = "./gifs/"
 
 gamma = 0.99 
 eps_start = 1
@@ -85,7 +87,7 @@ while step_count < max_steps:
     tensorboard_summarizer.update_values('q_loss',q_loss,i_episode)
     
     if i_episode % log_interval == 0 or step_count >= max_steps:
-        ep_reward, val_steps = test(env,policy_net,show=show_eval)
+        ep_reward, val_steps = test(i_episode,env,policy_net,show=show_eval,save_gif=save_gif,gif_dir=gif_dir)
         ep_rew_history.append((i_episode, ep_reward))
         print("Episode: " + str(i_episode) + "\tTotal steps: " 
             + str(step_count) + "\tEval reward: " + str(ep_reward)

@@ -1,9 +1,9 @@
 import datetime
+import os
 import random
 import time
 from collections import namedtuple
 from time import sleep
-import os
 
 import gym
 import matplotlib.pyplot as plt
@@ -12,7 +12,7 @@ import tensorflow as tf
 from gym.envs.classic_control import rendering
 from pyvirtualdisplay import Display
 from tensorflow.keras.layers import Conv2D, Dense, Input
-
+from PIL import Image
 
 def repeat_upsample(rgb_array, k=1, l=1, err=[]):
     # repeat kinda crashes if k/l are zero
@@ -158,11 +158,16 @@ def train_step(policy_net,target_net,replay_memory,batch_size,gamma):
 
     return loss_value
 
-def test(env, policy_net, show=False):
+def test(episode, env, policy_net, show=False, save_gif = False, gif_dir = None):
 
     if show:
         viewer = rendering.SimpleImageViewer()
         rgb = env.render('rgb_array')
+
+    if save_gif:
+        frame = env.render('rgb_array')
+        frame = repeat_upsample(frame,4,4)
+        gif_frames = [frame]
 
     state, ep_reward, done = env.reset(), 0, False
     steps = 0
@@ -181,10 +186,24 @@ def test(env, policy_net, show=False):
         
         if show:
             rgb = env.render('rgb_array')
+        
+        if save_gif:
+            frame = env.render('rgb_array')
+            frame = repeat_upsample(frame,4,4)
+            gif_frames.append(frame)
     
     if show:
         viewer.close()
-        env.close()
+
+    name_gif = "test_episode_" + str(episode) + ".gif"
+
+    if save_gif:
+        images = []
+        for frame in gif_frames:
+            images.append(Image.fromarray(frame))
+        images[0].save(gif_dir+name_gif,save_all=True, append_images=images[1:], optimize=False, duration=100, loop=0)
+
+    env.close()
     
     return ep_reward, steps
 
@@ -211,4 +230,3 @@ class TensorboardSummary(object):
     def update_values(self,param,value,episode):
         with self.dict_param_writer[param][0].as_default():
             tf.summary.scalar(self.dict_param_writer[param][1], value, step=episode)
-
