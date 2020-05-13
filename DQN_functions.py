@@ -71,11 +71,11 @@ class DQN(object):
     
     def get_best_action(self,state):
         state = np.expand_dims(state,axis=0)
-        return tf.argmax(self.model(state),1)
+        return tf.argmax(self.model(state),axis=-1)
     
     def get_best_q(self,state):
         state = np.expand_dims(state,axis=0)
-        return np.max(self.model(state),axis=1)
+        return np.max(self.model(state),axis=-1)
 
 class ActionScheduler(object):
 
@@ -143,10 +143,8 @@ def train_step(policy_net,target_net,replay_memory,batch_size,gamma):
     rewards = np.array([elem[3] for elem in transitions])
     terminal_flags = np.array([int(elem[4]) for elem in transitions])
 
-    pred_target = target_net.model(next_states)
-    best_predicted_q = np.max(pred_target,axis=1)
-    
-    target_q = rewards + (gamma*best_predicted_q * (1-terminal_flags))
+    target_q_values = target_net.get_best_q(next_states) 
+    target_q = rewards + (gamma*target_q_values * (1-terminal_flags))
 
     with tf.GradientTape() as tape:
         pred_policy = policy_net.model(states)

@@ -18,9 +18,9 @@ gamma = 0.99
 eps_start = 1
 eps_end_exploration = 0.1
 eps_end = 0.01
-max_steps = 300000
-exploration_steps = 100000
-full_exploration_steps = 1000
+max_steps = 3000000
+exploration_steps = 1000000
+full_exploration_steps = 10000
 batch_size = 32
 
 target_update = 100
