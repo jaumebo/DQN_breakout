@@ -14,6 +14,9 @@ from pyvirtualdisplay import Display
 from tensorflow.keras.layers import Conv2D, Dense, Input
 from PIL import Image
 
+def reward_shaper(rew, done):
+    return rew if not done else -10
+
 def repeat_upsample(rgb_array, k=1, l=1, err=[]):
     # repeat kinda crashes if k/l are zero
     if k <= 0 or l <= 0: 
@@ -70,11 +73,9 @@ class DQN(object):
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
     
     def get_best_action(self,state):
-        state = np.expand_dims(state,axis=0)
         return tf.argmax(self.model(state),axis=-1)
     
     def get_best_q(self,state):
-        state = np.expand_dims(state,axis=0)
         return np.max(self.model(state),axis=-1)
 
 class ActionScheduler(object):
@@ -117,10 +118,9 @@ class ActionScheduler(object):
     def get_action(self,state,step):
 
         eps = self._compute_current_eps(step)
-
         if np.random.rand(1) < eps:
             return np.random.randint(0, self.n_actions)
-        return self.DQNetwork.get_best_action(state)
+        return self.DQNetwork.get_best_action(state).numpy()[0]
     
     def plot_eps_schedule(self):
         eps_values = []
@@ -135,7 +135,7 @@ def train_step(policy_net,target_net,replay_memory,batch_size,gamma):
         return
 
     #Transitions: state, action, next_state, reward, finished
-    transitions = replay_memory.sample(batch_size)
+    transitions = replay_memory.sample(3)
 
     states = np.array([elem[0] for elem in transitions])
     action_batch = tf.convert_to_tensor(np.array([[elem[1]] for elem in transitions]),dtype="int32")
@@ -143,7 +143,7 @@ def train_step(policy_net,target_net,replay_memory,batch_size,gamma):
     rewards = np.array([elem[3] for elem in transitions])
     terminal_flags = np.array([int(elem[4]) for elem in transitions])
 
-    target_q_values = target_net.get_best_q(next_states) 
+    target_q_values = target_net.get_best_q(next_states)
     target_q = rewards + (gamma*target_q_values * (1-terminal_flags))
 
     with tf.GradientTape() as tape:
@@ -175,10 +175,16 @@ def test(episode, env, policy_net, show=False, save_gif = False, gif_dir = None)
             upscaled=repeat_upsample(rgb,4, 4)
             viewer.imshow(upscaled)
 
-        action = policy_net.get_best_action(state)
+        action = policy_net.get_best_action(np.expand_dims(state,axis=0)).numpy()[0]
         state, reward, done, info = env.step(action)
+
+        reward = reward_shaper(reward,done)
+
+        '''
         if info['ale.lives']==4:
             done = True
+        '''
+
         ep_reward += reward
         steps += 1
         
