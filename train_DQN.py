@@ -3,45 +3,40 @@ from DQN_functions import *
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-
-# Hyperparameters
 #env_name = "Breakout-ram-v0"
 env_name = "CartPole-v1"
+env = gym.make(env_name)
 
-path_logs = 'logs'
+path_logs = 'logs/'
 
 seed = 123  # random seed
-log_interval = 50  # controls how often we log progress, in episodes
-show_eval = False  # controls if we see an evaluation episode
-save_gif = False
-gif_dir = "./gifs/"
+log_interval = 200  # controls how often we log progress, in episodes
 
+lr = 1e-2
 gamma = 0.99 
 eps_start = 1
-eps_end_exploration = 0.99999
-eps_end = 0.1
-max_steps = 50000
-exploration_steps = 1
-full_exploration_steps = 0
+eps_end_exploration = 0.1
+eps_end = 0.0001
+max_steps = 100000
+exploration_steps = 80000
+full_exploration_steps = 10000
 batch_size = 256
 
 target_update = 1000
 
-### TRAIN LOOP
-
-env = gym.make(env_name)
-env.seed(seed)
-
-state_shape = env.observation_space.shape
+num_states = env.observation_space.shape[0]
 n_actions = env.action_space.n
+hidden_units = [200, 200]
 
-policy_net = DQN(n_actions,state_shape,n_hidden_2=None)
-target_net = DQN(n_actions,state_shape,n_hidden_2=None)
+max_experiences = 10000
+min_experiences = 100
 
-replay_memory = ReplayMemory(capacity=10000)
+current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+log_dir = path_logs + current_time
 
-action_scheduler = ActionScheduler(DQNetwork=policy_net,
-                                    max_steps=max_steps,
+summary_writer = tf.summary.create_file_writer(log_dir)
+
+epsilon_scheduler = EpsilonScheduler(max_steps=max_steps,
                                     n_actions=n_actions,
                                     eps_start=eps_start,
                                     eps_end_exploration=eps_end_exploration,
@@ -49,62 +44,25 @@ action_scheduler = ActionScheduler(DQNetwork=policy_net,
                                     exploration_steps=exploration_steps,
                                     full_exploration_steps=full_exploration_steps)
 
-tensorboard_summarizer = TensorboardSummary(path_logs)
+DQagent = DQN(num_states, n_actions, hidden_units, gamma, max_experiences, min_experiences, batch_size, lr)
 
-step_count = 0
-i_episode = 0
-ep_rew_history = []
+total_rewards = []
+step = 0
+episodes = 0
+while step<max_steps:
+    reward, losses, step = game_step(env, DQagent, epsilon_scheduler, target_update, step)
+    episodes += 1
+    total_rewards.append(reward)
+    avg_rewards = np.asarray(total_rewards[max(0, episodes - 100):(episodes + 1)]).mean()
+    with summary_writer.as_default():
+        tf.summary.scalar('episode reward', reward, step=episodes)
+        tf.summary.scalar('running avg reward (100 episodes)', avg_rewards, step=episodes)
+        tf.summary.scalar('average loss)', losses, step=episodes)
+    if episodes % 100 == 0:
+        print("episode:", episodes, "episode reward:", reward, "running avg reward (100 episodes):", avg_rewards,
+                "episode loss: ", losses)
 
-
-while step_count < max_steps:
-
-    state, done = env.reset(), False
-    ep_reward = 0
-
-    while not done:
-
-        action = action_scheduler.get_action(np.expand_dims(state,axis=0),step_count)
-        step_count+=1
-
-        next_state, reward, done, info = env.step(action)
-
-        reward = reward_shaper(reward, done)
-
-        ep_reward += reward
-
-        '''
-        if info['ale.lives']==4:
-            done = True
-        '''
-
-        if done:
-            next_state = state
-
-        replay_memory.push(state,action,next_state,reward,done)
-
-        state = next_state
-
-        q_loss = train_step(policy_net,target_net,replay_memory,batch_size,gamma)
-
-        if step_count % target_update == 0:
-            target_net.model.set_weights(policy_net.model.get_weights())
-
-    #tensorboard_summarizer.update_values('train_rewards',ep_reward,i_episode)
-    #tensorboard_summarizer.update_values('q_loss',q_loss,i_episode)
-
-    if i_episode % log_interval == 0 or step_count >= max_steps:
-        ep_reward, val_steps = test(i_episode,env,policy_net,show=show_eval,save_gif=save_gif,gif_dir=gif_dir)
-        ep_rew_history.append((i_episode, ep_reward))
-        print("Episode: " + str(i_episode) + "\tTotal steps: " 
-            + str(step_count) + "\tEval reward: " + str(ep_reward)
-            + "\tEval steps: " + str(val_steps))
-
-        #tensorboard_summarizer.update_values('validation_rewards',ep_reward,i_episode)
-
-    i_episode += 1
-
-
-
-
-
-
+print("Avg reward for last 100 episodes:", avg_rewards)
+print("Total episodes: ", episodes)
+make_video(env, DQagent)
+env.close()
