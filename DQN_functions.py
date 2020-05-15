@@ -89,7 +89,8 @@ class DQN:
             v1.assign(v2.numpy())
 
 def reward_shaper(rew, done):
-    return rew if not done else -200
+    #return rew if not done else -200
+    return rew
 
 def game_step(env, DQagent, epsilon_scheduler, target_update, step):
     rewards = 0
@@ -100,6 +101,10 @@ def game_step(env, DQagent, epsilon_scheduler, target_update, step):
         action = DQagent.get_action(observations, epsilon_scheduler.get_eps(step))
         prev_observations = observations
         observations, reward, done, info = env.step(action)
+
+        if info['ale.lives']==4:
+            done = True
+
         rewards += reward
 
         reward = reward_shaper(reward,done)
@@ -120,8 +125,8 @@ def game_step(env, DQagent, epsilon_scheduler, target_update, step):
 
     return rewards, np.mean(losses), step
 
-def make_video(env, DQagent):
-    env = wrappers.Monitor(env, os.path.join(os.getcwd(), "videos"), force=True)
+def make_video(env, DQagent, video_dir, video_name, max_video_steps):
+    env = wrappers.Monitor(env, os.path.join(video_dir, video_name), force=True)
     rewards = 0
     steps = 0
     done = False
@@ -129,8 +134,18 @@ def make_video(env, DQagent):
     while not done:
         action = DQagent.get_action(observation, 0)
         observation, reward, done, info = env.step(action)
+
         steps += 1
         rewards += reward
+
+        if info['ale.lives']==4:
+            done = True
+
+        if rewards < 10 and steps>=max_video_steps:
+            done = True
+
+
+
     print("Testing steps: {} rewards {}: ".format(steps, rewards))
 
 

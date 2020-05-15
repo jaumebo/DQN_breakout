@@ -7,6 +7,10 @@ __pycache__/
 /videos
 # C extensions
 *.so
+*.mp4
+events.out.tfevents*
+*.json
+breakout_ram_checkpoints/
 
 # Distribution / packaging
 .Python

@@ -3,36 +3,44 @@ from DQN_functions import *
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-#env_name = "Breakout-ram-v0"
-env_name = "CartPole-v1"
+env_name = "Breakout-ram-v0"
+#env_name = "CartPole-v1"
 env = gym.make(env_name)
 
-path_logs = 'logs/'
 
 seed = 123  # random seed
-log_interval = 200  # controls how often we log progress, in episodes
+video_interval = 400  # controls how often we create a video, in episodes
+log_interval = 100 # controls how often we log progress, in episodes
+model_checkpoint = 1000 # controls how often we save the weights of the trained model
+max_video_steps = 1000 # controls the maximum of steps recorded in a video (applied if rewards is below 10)
 
-lr = 1e-2
+lr = 1e-4
 gamma = 0.99 
 eps_start = 1
 eps_end_exploration = 0.1
-eps_end = 0.0001
-max_steps = 100000
-exploration_steps = 80000
-full_exploration_steps = 10000
-batch_size = 256
+eps_end = 0.01
+max_steps = 30000000
+exploration_steps = 10000000
+full_exploration_steps = 50000
+batch_size = 64
 
-target_update = 1000
+target_update = 10000
 
 num_states = env.observation_space.shape[0]
 n_actions = env.action_space.n
-hidden_units = [200, 200]
+hidden_units = [1024, 256]
 
-max_experiences = 10000
-min_experiences = 100
+max_experiences = 1000000
+min_experiences = 1000
+
+path_logs = 'breakout_ram_logs/'
+path_videos = 'breakout_ram_videos/'
+path_checkpoints = 'breakout_ram_checkpoints/'
 
 current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 log_dir = path_logs + current_time
+video_dir = path_videos + current_time
+weights_directory = path_checkpoints + current_time + "/"
 
 summary_writer = tf.summary.create_file_writer(log_dir)
 
@@ -58,11 +66,17 @@ while step<max_steps:
         tf.summary.scalar('episode reward', reward, step=episodes)
         tf.summary.scalar('running avg reward (100 episodes)', avg_rewards, step=episodes)
         tf.summary.scalar('average loss)', losses, step=episodes)
-    if episodes % 100 == 0:
+    if episodes % log_interval == 0:
         print("episode:", episodes, "episode reward:", reward, "running avg reward (100 episodes):", avg_rewards,
                 "episode loss: ", losses)
+    if episodes % video_interval == 0:
+        print("Making video for episode:", episodes)
+        make_video(env,DQagent,video_dir,"episode_" + str(episodes),max_video_steps)
+    if episodes % model_checkpoint == 0:
+        print("Saving model weights on checkpoint folder.")
+        DQagent.policy_net.save_weights(weights_directory + "checkpoint_episode_" + str(episodes) + "/model_checkpoint")
 
 print("Avg reward for last 100 episodes:", avg_rewards)
 print("Total episodes: ", episodes)
-make_video(env, DQagent)
+make_video(env, DQagent, video_dir, "final_video", np.inf)
 env.close()
