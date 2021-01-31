@@ -12,8 +12,10 @@ class NN_Model(tf.keras.Model):
     def __init__(self, num_states, hidden_units, num_actions):
         super(NN_Model, self).__init__()
         self.input_layer = tf.keras.layers.InputLayer(input_shape=(num_states,))
+        self.dropout_layers = []
         self.hidden_layers = []
         for i in hidden_units:
+            self.dropout_layers.append(tf.keras.layers.Dropout(.5))
             self.hidden_layers.append(tf.keras.layers.Dense(
                 i, activation='tanh', kernel_initializer='RandomNormal'))
         self.output_layer = tf.keras.layers.Dense(
@@ -22,7 +24,8 @@ class NN_Model(tf.keras.Model):
     @tf.function
     def call(self, inputs):
         z = self.input_layer(inputs)
-        for layer in self.hidden_layers:
+        for (layer, dropout) in zip(self.hidden_layers,self.dropout_layers):
+            z = dropout(z)
             z = layer(z)
         output = self.output_layer(z)
         return output
@@ -40,11 +43,11 @@ class DQN:
         self.min_experiences = min_experiences
         self.loss = tf.keras.losses.Huber()
 
-    def predict_policy(self, inputs):
-        return self.policy_net(np.atleast_2d(inputs.astype('float32')))
+    def predict_policy(self, inputs, training=True):
+        return self.policy_net(np.atleast_2d(inputs.astype('float32')), training=training)
 
     def predict_target(self, inputs):
-        return self.target_net(np.atleast_2d(inputs.astype('float32')))
+        return self.target_net(np.atleast_2d(inputs.astype('float32')),training=True)
 
     def train_step(self):
         if len(self.memory['state']) < self.min_experiences:
@@ -69,11 +72,11 @@ class DQN:
         self.optimizer.apply_gradients(zip(gradients, variables))
         return loss
 
-    def get_action(self, states, epsilon):
+    def get_action(self, states, epsilon, training=True):
         if np.random.random() < epsilon:
-            return np.random.choice(self.num_actions)
+            return np.random.choice(self.num_actions) + 1
         else:
-            return np.argmax(self.predict_policy(states)[0])
+            return np.argmax(self.predict_policy(states, training)[0]) + 1
 
     def add_experience(self, exp):
         if len(self.memory['state']) >= self.max_experiences:
@@ -92,22 +95,28 @@ def reward_shaper(rew, done):
     #return rew if not done else -200
     return rew
 
-def game_step(env, DQagent, epsilon_scheduler, target_update, step):
+def game_step(env, DQagent, epsilon_scheduler, target_update, step, skip_frames):
     rewards = 0
     done = False
     observations = env.reset()
+    observations, reward, done, info = env.step(1)
+    observation, reward, done, info = env.step(1)
     losses = list()
     while not done:
         action = DQagent.get_action(observations, epsilon_scheduler.get_eps(step))
         prev_observations = observations
-        observations, reward, done, info = env.step(action)
+
+        action_reward = 0
+        for _ in range(skip_frames):
+            observations, reward, done, info = env.step(action)
+            action_reward += reward
 
         if info['ale.lives']==4:
             done = True
 
-        rewards += reward
+        rewards += action_reward
 
-        reward = reward_shaper(reward,done)
+        reward = reward_shaper(action_reward,done)
 
         exp = {'state': prev_observations, 'action': action, 'reward': reward, 'next_state': observations, 'done': done}
         DQagent.add_experience(exp)
@@ -125,18 +134,22 @@ def game_step(env, DQagent, epsilon_scheduler, target_update, step):
 
     return rewards, np.mean(losses), step
 
-def make_video(env, DQagent, video_dir, video_name, max_video_steps):
+def make_video(env, DQagent, video_dir, video_name, max_video_steps, skip_frames):
     env = wrappers.Monitor(env, os.path.join(video_dir, video_name), force=True)
     rewards = 0
     steps = 0
     done = False
     observation = env.reset()
+    observation, reward, done, info = env.step(1)
+    observation, reward, done, info = env.step(1)
     while not done:
-        action = DQagent.get_action(observation, 0)
-        observation, reward, done, info = env.step(action)
+        action = DQagent.get_action(observation, 0, training=False)
+
+        for _ in range(skip_frames):
+            observation, reward, done, info = env.step(action)
+            rewards += reward
 
         steps += 1
-        rewards += reward
 
         if info['ale.lives']==4:
             done = True
